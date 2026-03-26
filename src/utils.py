@@ -1,5 +1,7 @@
 import torch
 from datasets import Dataset
+import io
+from PIL import Image
 
 def build_scienceqa_prompt(question: str, choices: list) -> str:
     prompt = f"{question}\n\nChoices:\n"
