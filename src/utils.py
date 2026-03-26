@@ -32,7 +32,7 @@ def build_scienceqa_prompt(question: str, choices: list) -> str:
 def prepare_scienceqa_for_grpo(raw_dataset, max_samples=None):
     formatted_data = {
         "prompt": [],    
-        "ground_truth": [],
+        "answer": [], 
     }
     
     labels = ["A", "B", "C", "D", "E"]
@@ -45,24 +45,42 @@ def prepare_scienceqa_for_grpo(raw_dataset, max_samples=None):
         if item["image"] is None:
             continue
             
-        text_prompt = build_scienceqa_prompt(item["question"], item["choices"])
+        # --- FIX LỖI TẠI ĐÂY: Chuyển Dict sang PIL Image ---
+        img_data = item["image"]
+        try:
+            if isinstance(img_data, dict) and "bytes" in img_data:
+                # Giải mã từ bytes
+                image = Image.open(io.BytesIO(img_data["bytes"])).convert("RGB")
+            elif isinstance(img_data, Image.Image):
+                image = img_data.convert("RGB")
+            else:
+                continue 
+        except Exception as e:
+            print(f"Lỗi ảnh tại dòng {count}: {e}")
+            continue
+        # -----------------------------------------------
+
+        text_prompt = (
+            f"Question: {item['question']}\n\nChoices: {item['choices']}\n\n"
+            "Reason step by step. Enclose your reasoning within <think> </think> tags "
+            "and your final answer (A/B/C/D) within <answer> </answer> tags."
+        )
         
+        # Cấu hình messages chuẩn cho Multimodal GRPO
         messages = [
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "image": item["image"]}, 
+                    {"type": "image", "image": image}, # Bây giờ 'image' đã là PIL Object
                     {"type": "text", "text": text_prompt}
                 ]
             }
         ]
         
-        correct_index = item["answer"]
-        correct_letter = labels[correct_index]
+        correct_letter = labels[item["answer"]]
         
         formatted_data["prompt"].append(messages)
-        formatted_data["ground_truth"].append(correct_letter)
-        
+        formatted_data["answer"].append(correct_letter)
         count += 1 
         
     return Dataset.from_dict(formatted_data)
