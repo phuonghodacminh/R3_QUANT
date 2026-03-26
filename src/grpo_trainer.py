@@ -26,16 +26,19 @@ def train_r3_quant_grpo(model_dir: str, train_data, output_dir: str):
         logging_steps=1,           
         max_steps=500,
         per_device_train_batch_size=1, 
-        gradient_accumulation_steps=4,
+        gradient_accumulation_steps=8,
         gradient_checkpointing=True, 
         num_generations=4,         
-        prompt_max_target_length=512,
-        max_completion_length=1024,  
-        bf16=True,                   
+        # SỬA Ở ĐÂY: Sử dụng đúng tên tham số từ danh sách bạn gửi
+        max_completion_length=512, # Đã có trong list của bạn
+        # Tham số max_prompt_length không có, bạn có thể kiểm soát thông qua 
+        # việc truncate dữ liệu đầu vào hoặc để mặc định.
+        
+        bf16=True,                                  
         remove_unused_columns=False, 
-        report_to="none"             
+        report_to="none",
+        use_cache=False # Tắt use_cache khi dùng gradient checkpointing
     )
-
     reward_funcs = [
         format_reward_func,
         accuracy_reward_func
