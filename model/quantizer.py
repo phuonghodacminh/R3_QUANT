@@ -1,62 +1,43 @@
-import sys
-import os
 import torch
-from transformers import AutoProcessor, Qwen2VLForConditionalGeneration, GPTQConfig, AutoConfig
+from transformers import Qwen2VLForConditionalGeneration, AutoProcessor, BitsAndBytesConfig
+import os
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from data.dataset_loader import ScienceQALocalLoader
-
-class QwenGPTQQuantizer:
-    def __init__(self, base_model_path, save_path, data_path):
+class Qwen4BitQuantizer:
+    def __init__(self, base_model_path, save_path):
         self.base_model_path = base_model_path
         self.save_path = save_path
-        self.data_path = data_path
 
-    def get_calibration_data(self, test_size=8):
-        loader = ScienceQALocalLoader(self.data_path, subset_size=test_size)
-        df = loader.preprocess_for_r3_quant()
-        return [f"Question: {row['question']}\nAnswer: {row['reasoning']}" for _, row in df.iterrows()]
-
-    def quantize_and_save(self, bits=3):
-        calib_dataset = self.get_calibration_data(test_size=8)
-        
-        gptq_config = GPTQConfig(
-            bits=bits,
-            dataset=calib_dataset,
-            tokenizer=self.base_model_path, 
-            use_exllama=False,            
-            desc_act=False,
-            sym=True
+    def quantize_and_save(self):
+        # Cấu hình nén 4-bit NF4 - Rất tốt cho Vision Language Model
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.bfloat16,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_use_double_quant=True,
         )
 
-        config = AutoConfig.from_pretrained(self.base_model_path)
-        config.use_cache = False
+        print(f"--- Đang nén Qwen2-VL từ: {self.base_model_path} ---")
+        
+        # Load model trực tiếp vào 4-bit
+        model = Qwen2VLForConditionalGeneration.from_pretrained(
+            self.base_model_path,
+            quantization_config=bnb_config,
+            device_map="auto",
+            torch_dtype=torch.bfloat16,
+            low_cpu_mem_usage=True
+        )
 
-        try:
-            model = Qwen2VLForConditionalGeneration.from_pretrained(
-                self.base_model_path,
-                config=config,
-                quantization_config=gptq_config,
-                device_map="auto",
-                torch_dtype=torch.bfloat16,
-                low_cpu_mem_usage=True
-            )
-
-            model.to("cpu")
-            os.makedirs(self.save_path, exist_ok=True)
-            model.save_pretrained(self.save_path)
-            
-            processor = AutoProcessor.from_pretrained(self.base_model_path)
-            processor.save_pretrained(self.save_path)
-            
-        except Exception as e:
-            print(f"--- error: {e} ---")
-            sys.exit(1) 
+        # Lưu model (Lưu ý: Với BnB, nó sẽ lưu checkpoint dạng nén)
+        os.makedirs(self.save_path, exist_ok=True)
+        model.save_pretrained(self.save_path)
+        
+        processor = AutoProcessor.from_pretrained(self.base_model_path)
+        processor.save_pretrained(self.save_path)
+        print(f"--- Hoàn tất! Model nén lưu tại: {self.save_path} ---")
 
 if __name__ == "__main__":
-    BASE_MODEL = r"./weights/Qwen2-VL-2B-Instruct"
-    SAVE_DIR = r"./weights/Qwen2-VL-2B-Instruct-GPTQ-Int3"
-    DATA_PATH = r"./data/science_qa/validation-00000-of-00001-6c7328ff6c84284c.parquet"
+    BASE_MODEL = "./weights/Qwen2-VL-2B-Instruct"
+    SAVE_DIR = "./weights/Qwen2-VL-2B-Instruct-4bit"
     
-    quantizer = QwenGPTQQuantizer(BASE_MODEL, SAVE_DIR, DATA_PATH)
-    quantizer.quantize_and_save(bits=3)
+    quantizer = Qwen4BitQuantizer(BASE_MODEL, SAVE_DIR)
+    quantizer.quantize_and_save()
