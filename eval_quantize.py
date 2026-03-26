@@ -5,7 +5,7 @@ import io
 import gc
 import re
 from PIL import Image
-from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration
+from transformers import AutoProcessor, Qwen2VLForConditionalGeneration, BitsAndBytesConfig
 from qwen_vl_utils import process_vision_info
 import pandas as pd
 from tqdm import tqdm
@@ -15,12 +15,21 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from data.dataset_loader import ScienceQALocalLoader
 
 def evaluate_model(model_path, df, lora_path=None):
-    model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+    bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.bfloat16,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_use_double_quant=True
+        )
+
+    print(f"\n--- Đang load model từ: {model_path} ---")
+    model = Qwen2VLForConditionalGeneration.from_pretrained(
         model_path,
+        quantization_config=bnb_config,
         device_map="auto",
         torch_dtype=torch.bfloat16,
+        low_cpu_mem_usage=True
     )
-    
     if lora_path:
         print(f" -> Đang cấy ghép LoRA từ: {lora_path}")
         model = PeftModel.from_pretrained(model, lora_path)
