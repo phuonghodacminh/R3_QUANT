@@ -104,7 +104,8 @@ def evaluate_model(model_path, df, lora_path=None):
 
 if __name__ == "__main__":
     BASE_MODEL_PATH = r"./weights/Qwen2-VL-2B-Instruct"
-    QUANTIZED_MODEL_PATH = r"./weights/Qwen2-VL-2B-Instruct-GPTQ-Int3"
+    QUANTIZED_MODEL_PATH = r"./weights/Qwen2-VL-2B-Instruct-4bit"
+    R3_MODEL_PATH = r"./r3_quant_checkpoints"
     SFT_MODEL_PATH = r"./sft_baseline_checkpoints" 
     
     DATA_PATH = r"./data/science_qa/validation-00000-of-00001-6c7328ff6c84284c.parquet"
@@ -117,7 +118,7 @@ if __name__ == "__main__":
     base_acc, base_preds = evaluate_model(BASE_MODEL_PATH, df)
 
     print("\n--- [2] ĐÁNH GIÁ MODEL LƯỢNG TỬ HÓA (3-BIT) ---")
-    quant_acc, quant_preds = evaluate_model(QUANTIZED_MODEL_PATH, df)
+    quant_acc, quant_preds = evaluate_model(QUANTIZED_MODEL_PATH, df, lora_path=R3_MODEL_PATH)
     
     print("\n--- [3] ĐÁNH GIÁ MODEL SFT (INT3 + LoRA) ---")
     sft_acc, sft_preds = evaluate_model(QUANTIZED_MODEL_PATH, df, lora_path=SFT_MODEL_PATH)
