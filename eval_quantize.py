@@ -128,18 +128,12 @@ if __name__ == "__main__":
 
     print("\n--- [2] ĐÁNH GIÁ MODEL LƯỢNG TỬ HÓA (3-BIT) ---")
     quant_acc, quant_preds = evaluate_model(QUANTIZED_MODEL_PATH, df, lora_path=R3_MODEL_PATH)
-    
-    print("\n--- [3] ĐÁNH GIÁ MODEL SFT (INT3 + LoRA) ---")
-    sft_acc, sft_preds = evaluate_model(QUANTIZED_MODEL_PATH, df, lora_path=SFT_MODEL_PATH)
 
     print("\n" + "="*60)
     print(f"BẢNG VÀNG THÀNH TÍCH ({NUM_SAMPLES} MẪU)")
     print("="*60)
     print(f"1. Base Model (16-bit)      : {base_acc:.2f}%")
     print(f"2. Quantized Model (3-bit)  : {quant_acc:.2f}%")
-    print(f"3. SFT Model (3-bit + LoRA) : {sft_acc:.2f}%")
-    print("-" * 60)
-    print(f"SFT đã phục hồi được        : {sft_acc - quant_acc:.2f}% so với bản 3-bit bị lỗi")
     print("="*60)
 
     print("\n--- CHI TIẾT 3 MẪU ĐẦU TIÊN ---")
@@ -151,4 +145,3 @@ if __name__ == "__main__":
         print(f"🎯 Đáp án đúng : {target}")
         print(f"🤖 Base 16-bit : {base_preds[i][:50]}...")
         print(f"🥴 Quant 3-bit : {quant_preds[i][:50]}...")
-        print(f"🧠 SFT Model   : {sft_preds[i][:150]}...") 
