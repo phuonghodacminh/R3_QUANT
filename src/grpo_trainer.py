@@ -1,14 +1,31 @@
-import torch
-import sys
 import os
+import sys
+import warnings
+
+# Disable wandb to avoid protobuf compatibility issues on Kaggle
+os.environ["WANDB_DISABLED"] = "true"
+
+# Monkey-patch transformers to skip wandb availability check
+from transformers.integrations import integration_utils
+integration_utils.is_wandb_available = lambda: False
+
+import torch
 from trl import GRPOConfig, GRPOTrainer
 from transformers import AutoProcessor
 from datasets import load_dataset
 
+# Suppress specific deprecation warnings that don't affect functionality
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="torch.jit")
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from model.lora_setup import apply_lora_to_quantized_model
-from src.rewards import format_reward_func, accuracy_reward_func
+from src.rewards import (
+    format_reward_func,
+    accuracy_reward_func,
+    brevity_penalty_func,
+    reasoning_length_reward_func
+)
 from src.utils import prepare_scienceqa_for_grpo 
 
 def train_r3_quant_grpo(model_dir: str, train_data, output_dir: str):
@@ -17,7 +34,7 @@ def train_r3_quant_grpo(model_dir: str, train_data, output_dir: str):
 
     peft_model = apply_lora_to_quantized_model(model_dir)
     
-    grpo_dataset = prepare_scienceqa_for_grpo(train_data)
+    grpo_dataset = prepare_scienceqa_for_grpo(train_data, processor)
 
     training_args = GRPOConfig(
         output_dir=output_dir,
@@ -26,22 +43,20 @@ def train_r3_quant_grpo(model_dir: str, train_data, output_dir: str):
         logging_steps=1,           
         max_steps=500,
         per_device_train_batch_size=1, 
-        gradient_accumulation_steps=8,
+        gradient_accumulation_steps=4,
         gradient_checkpointing=True, 
-        num_generations=4,         
-        # SỬA Ở ĐÂY: Sử dụng đúng tên tham số từ danh sách bạn gửi
-        max_completion_length=512, # Đã có trong list của bạn
-        # Tham số max_prompt_length không có, bạn có thể kiểm soát thông qua 
-        # việc truncate dữ liệu đầu vào hoặc để mặc định.
-        
-        bf16=True,                                  
+        num_generations=4,
+        max_completion_length=512,
+        bf16=True,                   
         remove_unused_columns=False, 
         report_to="none",
-        use_cache=False # Tắt use_cache khi dùng gradient checkpointing
     )
+
     reward_funcs = [
         format_reward_func,
-        accuracy_reward_func
+        accuracy_reward_func,
+        brevity_penalty_func,
+        reasoning_length_reward_func
     ]
 
     trainer = GRPOTrainer(

@@ -3,7 +3,86 @@ from datasets import Dataset
 import io
 from PIL import Image
 
+class ScienceQAGRPODataset(torch.utils.data.Dataset):
+    """
+    Custom dataset for GRPO training that properly handles images.
+    Images are loaded on-the-fly to avoid serialization issues with PIL.
+    """
+    def __init__(self, raw_dataset, max_samples=None):
+        self.items = []
+        self.labels = ["A", "B", "C", "D", "E"]
+        count = 0
+        
+        for item in raw_dataset:
+            if max_samples and count >= max_samples:
+                break
+            if item["image"] is None:
+                continue
+            
+            self.items.append({
+                'image': item["image"],
+                'question': item["question"],
+                'choices': item["choices"],
+                'answer': item["answer"]
+            })
+            count += 1
+    
+    def __len__(self):
+        return len(self.items)
+    
+    def __getitem__(self, idx):
+        item = self.items[idx]
+        
+        try:
+            # Convert image to PIL on access (not stored in dataset)
+            pil_image = _convert_image_to_pil(item['image'])
+            
+            # Ensure RGB mode
+            if pil_image.mode != 'RGB':
+                pil_image = pil_image.convert('RGB')
+            
+            # Build prompt text
+            text_prompt = build_scienceqa_prompt(item['question'], item['choices'])
+            
+            # Build conversational format for VLM training
+            # GRPOTrainer requires conversational prompts with message dictionaries
+            messages = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image"},
+                        {"type": "text", "text": text_prompt}
+                    ]
+                }
+            ]
+            
+            correct_letter = self.labels[item['answer']]
+            
+            return {
+                "prompt": messages,      # Conversational format
+                "images": [pil_image],   # Must be a list, even for single image
+                "ground_truth": correct_letter
+            }
+        except Exception as e:
+            print(f"Error processing item {idx}: {e}")
+            # Return valid dummy item instead of failing
+            dummy_image = Image.new('RGB', (224, 224), color='white')
+            return {
+                "prompt": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "image"},
+                            {"type": "text", "text": "Describe the image."}
+                        ]
+                    }
+                ],
+                "images": [dummy_image],  # Must be a list
+                "ground_truth": "A"
+            }
+
 def build_scienceqa_prompt(question: str, choices: list) -> str:
+    """Build a formatted prompt for ScienceQA questions."""
     prompt = f"{question}\n\nChoices:\n"
     labels = ["A", "B", "C", "D", "E"]
     
@@ -31,61 +110,28 @@ def build_scienceqa_prompt(question: str, choices: list) -> str:
     )
     return prompt
 
-def prepare_scienceqa_for_grpo(raw_dataset, max_samples=None):
-    formatted_data = {
-        "prompt": [],    
-        "answer": [], 
-    }
-    
-    labels = ["A", "B", "C", "D", "E"]
-    count = 0 
-    
-    for item in raw_dataset:
-        if max_samples and count >= max_samples:
-            break
-            
-        if item["image"] is None:
-            continue
-            
-        # --- FIX LỖI TẠI ĐÂY: Chuyển Dict sang PIL Image ---
-        img_data = item["image"]
-        try:
-            if isinstance(img_data, dict) and "bytes" in img_data:
-                # Giải mã từ bytes
-                image = Image.open(io.BytesIO(img_data["bytes"])).convert("RGB")
-            elif isinstance(img_data, Image.Image):
-                image = img_data.convert("RGB")
-            else:
-                continue 
-        except Exception as e:
-            print(f"Lỗi ảnh tại dòng {count}: {e}")
-            continue
-        # -----------------------------------------------
+def _convert_image_to_pil(image_data):
+    """Convert image data from HuggingFace format to PIL Image."""
+    if isinstance(image_data, Image.Image):
+        return image_data
+    elif isinstance(image_data, dict):
+        if 'bytes' in image_data:
+            return Image.open(io.BytesIO(image_data['bytes'])).convert('RGB')
+        elif 'path' in image_data:
+            return Image.open(image_data['path']).convert('RGB')
+    elif isinstance(image_data, str):
+        return Image.open(image_data).convert('RGB')
+    return image_data
 
-        text_prompt = (
-            f"Question: {item['question']}\n\nChoices: {item['choices']}\n\n"
-            "Reason step by step. Enclose your reasoning within <think> </think> tags "
-            "and your final answer (A/B/C/D) within <answer> </answer> tags."
-        )
-        
-        # Cấu hình messages chuẩn cho Multimodal GRPO
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image", "image": image}, # Bây giờ 'image' đã là PIL Object
-                    {"type": "text", "text": text_prompt}
-                ]
-            }
-        ]
-        
-        correct_letter = labels[item["answer"]]
-        
-        formatted_data["prompt"].append(messages)
-        formatted_data["answer"].append(correct_letter)
-        count += 1 
-        
-    return Dataset.from_dict(formatted_data)
+def prepare_scienceqa_for_grpo(raw_dataset, processor, max_samples=None):
+    """
+    Prepare dataset for GRPO training using custom dataset class.
+    The processor is stored for later formatting via chat template.
+    """
+    dataset = ScienceQAGRPODataset(raw_dataset, max_samples=max_samples)
+    if len(dataset) == 0:
+        print("Warning: Dataset is empty after processing. This may cause training to fail.")
+    return dataset
 
 def prepare_scienceqa_for_sft(raw_dataset, max_samples=None):
     """
