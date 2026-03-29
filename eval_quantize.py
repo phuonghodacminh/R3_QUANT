@@ -4,6 +4,7 @@ import torch
 import io
 import gc
 import re
+import numpy as np
 from PIL import Image
 from transformers import AutoProcessor, Qwen2VLForConditionalGeneration, BitsAndBytesConfig
 from qwen_vl_utils import process_vision_info
@@ -117,7 +118,7 @@ if __name__ == "__main__":
     R3_MODEL_PATH = r"./r3_quant_checkpoints"
     SFT_MODEL_PATH = r"./sft_baseline_checkpoints" 
     
-    DATA_PATH = r"./data/science_qa/validation-00000-of-00001-6c7328ff6c84284c.parquet"
+    DATA_PATH = r"./data/science_qa/test-00000-of-00001-f0e719df791966ff.parquet"
     NUM_SAMPLES = 500
 
     loader = ScienceQALocalLoader(DATA_PATH, subset_size=NUM_SAMPLES)

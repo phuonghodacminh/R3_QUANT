@@ -13,12 +13,21 @@ def setup_environment():
 
 def download_data():
     print("\n--- 2. Đang tải Dataset ScienceQA từ Hugging Face ---")
-    dataset = load_dataset("derek-thomas/ScienceQA", split="validation")
-    
-    target_path = "./data/science_qa/validation-00000-of-00001-6c7328ff6c84284c.parquet"
-    if not os.path.exists(target_path):
-        dataset.to_parquet(target_path)
-        print(f"Đã lưu dataset tại: {target_path}")
+    dataset1 = load_dataset("derek-thomas/ScienceQA", split="validation")
+    dataset2 = load_dataset("derek-thomas/ScienceQA", split="test")
+
+    target_path_1 = "./data/science_qa/validation-00000-of-00001-6c7328ff6c84284c.parquet"
+    target_path_2 = "./data/science_qa/test-00000-of-00001-f0e719df791966ff.parquet"
+
+    if not os.path.exists(target_path_1):
+        dataset1.to_parquet(target_path_1)
+        print(f"Đã lưu dataset tại: {target_path_1}")
+    else:
+        print("Dataset đã tồn tại, bỏ qua bước tải.")
+
+    if not os.path.exists(target_path_2):
+        dataset2.to_parquet(target_path_2)
+        print(f"Đã lưu dataset tại: {target_path_2}")
     else:
         print("Dataset đã tồn tại, bỏ qua bước tải.")
 
